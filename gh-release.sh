@@ -44,7 +44,9 @@ done
 if [[ -s "${TARGET_FILE}" ]]; then
   TARGET_FILE="${TARGET_FILE}"
 else
-  TARGET_FILE=$(ls *.sh *.py *.go 2>/dev/null | head -n1 || true)
+  TARGET_FILE=$(\
+      ls *.sh *.py *.go *.tf 2>/dev/null | head -n1 || true\
+  )
 fi
 
 [[ -z "${TARGET_FILE}" ]] && { echo "❌ No file specified or found."; exit 1; }
@@ -143,8 +145,8 @@ else
 fi
 
 # --- Git commit, tag, push --------------------------------
-git add "${TARGET_FILE}" "${CHANGELOG}"
-git commit -m "${COMMIT_MSG}" || true
+#git add "${TARGET_FILE}" "${CHANGELOG}"
+git commit -m "${COMMIT_MSG}" . || true
 git tag -a "${VERSION}" -m "${TAG_MSG}"
 git push origin HEAD
 git push origin "${VERSION}"
@@ -153,7 +155,7 @@ git push origin "${VERSION}"
 if command -v gh >/dev/null 2>&1; then
   echo "📡 Creating GitHub release..."
   gh release create "${VERSION}" "${TARGET_FILE}" \
-    --title "${NAME:-$(basename "$(pwd)")}" \
+    --title "${NAME:-$(basename "$(pwd)")} ${VERSION}" \
     --notes-file "${CHANGELOG}"
   echo "✅ GitHub release published."
 else
