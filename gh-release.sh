@@ -12,6 +12,7 @@ set -euo pipefail
 # --- CLI args ---------------------------------------------
 TARGET_FILE='header-info.txt'
 CHANGELOG='CHANGELOG.md'
+ADD_ALL=false
 DRY_RUN=false
 
 usage() {
@@ -19,10 +20,12 @@ usage() {
 Usage: $(basename "$0") [options]
 
 Options:
-  -f, --file <path>    File to release
-                       (default: first *.sh or main file)
+  -f, --file <path>    File to find the release info
+                       (default: header-info.txt)
   -m, --message <msg>  Commit message
                        (default: "Release <version>")
+  -a, --add-all        Add file(s) contents to index
+                       (performs: git add -A)
   -d, --dry-run        Show what would be done
                        (without changing anything)
   -h, --help           Show this help and exit
@@ -34,6 +37,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -f|--file) TARGET_FILE="$2"; shift 2 ;;
     -m|--message) USER_COMMIT_MSG="$2"; shift 2 ;;
+    -a|--add-all) ADD_ALL=true; shift 2 ;;
     -d|--dry-run) DRY_RUN=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1"; usage; exit 1 ;;
@@ -99,9 +103,9 @@ echo "🧾 Version : ${VERSION}"
 echo "💬 Commit  : ${COMMIT_MSG}"
 echo "🏷️ Tag Msg : ${TAG_MSG}"
 echo "📁 File    : ${TARGET_FILE}"
-echo "Dry Run    : ${DRY_RUN}"
-echo
 if [[ "${DRY_RUN}" == true ]]; then
+  echo "Dry Run    : ${DRY_RUN}"
+  echo
   echo "💡 Dry run only — no git actions performed."
   exit 0
 fi
@@ -117,13 +121,11 @@ if [[ -f "${CHANGELOG}" ]]; then
     head -n "${HEADER_END_LINE}" "${CHANGELOG}" > "${TMP}"
     echo "" >> "${TMP}"
     echo "## ${VERSION} — ${DATE_STR}" >> "${TMP}"
-    echo "" >> "${TMP}"
     echo "- ${COMMIT_MSG}" >> "${TMP}"
     echo "" >> "${TMP}"
     tail -n +"$((HEADER_END_LINE + 1))" "${CHANGELOG}" >> "${TMP}"
   else
     echo "## ${VERSION} — ${DATE_STR}" > "${TMP}"
-    echo "" >> "${TMP}"
     echo "- ${COMMIT_MSG}" >> "${TMP}"
     echo "" >> "${TMP}"
     cat "${CHANGELOG}" >> "${TMP}"
@@ -138,18 +140,20 @@ else
     echo "---"
     echo ""
     echo "## ${VERSION} — ${DATE_STR}"
-    echo ""
     echo "- ${COMMIT_MSG}"
     echo ""
   } > "${CHANGELOG}"
 fi
 
+set -x
 # --- Git commit, tag, push --------------------------------
 #git add "${TARGET_FILE}" "${CHANGELOG}"
+[[ ${ADD_ALL} == 'true' ]] && git add -A || true
 git commit -m "${COMMIT_MSG}" . || true
 git tag -a "${VERSION}" -m "${TAG_MSG}"
 git push origin HEAD
 git push origin "${VERSION}"
+set +x
 
 # --- GitHub release (if gh exists) ------------------------
 if command -v gh >/dev/null 2>&1; then
