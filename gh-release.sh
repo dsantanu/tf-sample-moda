@@ -7,7 +7,7 @@
 # Desc   : Extract metadata, enforce version bump, prepend
 #          CHANGELOG, create tag and GitHub release (via gh)
 # ==========================================================
-set -euo pipefail
+set -euox pipefail
 
 # --- CLI args ---------------------------------------------
 TARGET_FILE='header-info.txt'
@@ -37,7 +37,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -f|--file) TARGET_FILE="$2"; shift 2 ;;
     -m|--message) USER_COMMIT_MSG="$2"; shift 2 ;;
-    -a|--add-all) ADD_ALL=true; shift 2 ;;
+    -a|--add-all) ADD_ALL=true; shift ;;
     -d|--dry-run) DRY_RUN=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1"; usage; exit 1 ;;
