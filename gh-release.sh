@@ -7,7 +7,7 @@
 # Desc   : Extract metadata, enforce version bump, prepend
 #          CHANGELOG, create tag and GitHub release (via gh)
 # ==========================================================
-set -euox pipefail
+set -euo pipefail
 
 # --- CLI args ---------------------------------------------
 TARGET_FILE='header-info.txt'
@@ -145,7 +145,6 @@ else
   } > "${CHANGELOG}"
 fi
 
-set -x
 # --- Git commit, tag, push --------------------------------
 #git add "${TARGET_FILE}" "${CHANGELOG}"
 [[ ${ADD_ALL} == 'true' ]] && git add -A || true
@@ -153,7 +152,6 @@ git commit -m "${COMMIT_MSG}" . || true
 git tag -a "${VERSION}" -m "${TAG_MSG}"
 git push origin HEAD
 git push origin "${VERSION}"
-set +x
 
 # --- GitHub release (if gh exists) ------------------------
 if command -v gh >/dev/null 2>&1; then
