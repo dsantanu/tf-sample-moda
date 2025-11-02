@@ -4,6 +4,10 @@ All notable changes will be documented in this file.
 
 ---
 
+## v1.1.3 — 2025-11-02
+- Testing - Take-1.1.3
+
+
 ## v1.1.2 — 2025-11-02
 - Testing - Take-1.1.1
 

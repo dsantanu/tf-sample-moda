@@ -2,9 +2,9 @@
 # tf-sample-moda - for gh-release-cli testing
 # Name   : tf-sample-moda
 # Author : Santanu Das (@dsantanu)  |  License: MIT
-# Version: v1.1.2
+# Version: v1.1.3
 # Desc   : Extract metadata, enforce version bump, prepend
 #          CHANGELOG, create tag and GitHub release (via gh)
 # ==========================================================
 #
-## THIS is JUST a TEST - Take1.1.1.2
+## THIS is JUST a TEST - Take-1.1.3
