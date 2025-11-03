@@ -88,16 +88,15 @@ if [[ -n "${LATEST_TAG}" ]]; then
     echo "⛔ Version regression: ${VERSION} < ${LATEST_TAG}"
     echo "   You cannot release a version lower than the latest tag."
     exit 1
-  fi
-  if [[ "${VERSION}" == "${LATEST_TAG}" ]]; then
+  elif [[ "${VERSION}" == "${LATEST_TAG}" ]]; then
     if grep -q "^## ${VERSION}" "${CHANGELOG}" 2>/dev/null; then
       CL_MSG='Will be appended under the existing section'
       CL_APPEND_ONLY=true
-      CL_ENTRY='cl_append'
     else
       CL_MSG='Will be inserted as a new section-entry'
-      CL_ENTRY='cl_insert'
     fi
+  else
+    CL_MSG='Will be inserted as a new section-entry'
   fi
 fi
 
@@ -141,10 +140,10 @@ TAG_MSG="${USER_TAG_MSG:-$DEFAULT_TAG_MSG}"
 
 # --- Preview ----------------------------------------------
 echo
-echo "🧾 Version   : ${VERSION}"
-echo "💬 Commit    : ${COMMIT_MSG}"
-echo "🏷️ Tag Msg   : ${TAG_MSG}"
-echo "📁 Changelog : ${CL_MSG}: ${VERSION}"
+echo "🧾 Version    : ${VERSION}"
+echo "💬 Commit Msg : ${COMMIT_MSG}"
+echo "🏷️ Tag Msg    : ${TAG_MSG}"
+echo "📁 Changelog  : ${CL_MSG}: ${VERSION}"
 #echo "📁 File      : ${HEADER_FILE}"
 
 if [[ "${DRY_RUN}" == true ]]; then
@@ -251,7 +250,7 @@ fi
 git commit -m "${COMMIT_MSG}" . || true
 
 if [[ "${CL_APPEND_ONLY:-false}" == true ]]; then
-  echo "ℹ️  Existing version detected — skipping tag creation."
+  echo "ℹ️ Existing version detected — skipping tag creation."
   echo "   Committing changelog updates only..."
   git push origin "${CURRENT_BRANCH}"
 else
