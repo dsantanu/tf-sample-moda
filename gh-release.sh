@@ -3,7 +3,7 @@
 # gh-release-cli.sh — Automated GitHub release helper
 # Name   : Github Release CLI
 # Author : Santanu Das (@dsantanu)  |  License: MIT
-# Version: v2.1.0
+# Version: v2.2.0
 # Desc   : Extract metadata, enforce version bump, prepend
 #          CHANGELOG, create tag and GitHub release (via gh)
 # ==========================================================
@@ -12,8 +12,11 @@ set -euo pipefail
 # --- CLI args ---------------------------------------------
 HEADER_FILE='header-info.txt'
 CHANGELOG='CHANGELOG.md'
+USER_COMMIT_MSG=""
+FILE_CHANGED=false
 ADD_ALL=false
 DRY_RUN=false
+BRANCH=''
 
 usage() {
   cat <<EOF
@@ -24,6 +27,8 @@ Options:
                        (default: header-info.txt)
   -m, --message <msg>  Commit message
                        (default: "Release <version>")
+  -b, --branch <name>  Specify a custom branch to release
+                       (default: main or master)
   -a, --add-all        Add file(s) contents to index
                        (performs: git add -A)
   -d, --dry-run        Show what would be done
@@ -37,6 +42,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -f|--file) HEADER_FILE="$2"; shift 2 ;;
     -m|--message) USER_COMMIT_MSG="$2"; shift 2 ;;
+    -b|--branch) BRANCH="$2"; shift 2 ;;
     -a|--add-all) ADD_ALL=true; shift ;;
     -d|--dry-run) DRY_RUN=true; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -55,8 +61,7 @@ fi
 
 [[ -z "${HEADER_FILE}" ]] && { echo "❌ No file specified or found."; exit 1; }
 [[ ! -f "${HEADER_FILE}" ]] && { echo "❌ Target file not found: ${HEADER_FILE}"; exit 1; }
-
-echo "📄 Target file: ${HEADER_FILE}"
+#echo "📄 Target file: ${HEADER_FILE}"
 
 # --- Extract optional metadata ----------------------------
 NAME=$(awk -F':' '/^# Name/ {print $2}' "${HEADER_FILE}" | xargs || true)
@@ -75,7 +80,44 @@ if ! [[ "${VERSION}" =~ ${SEMVER_REGEX} ]]; then
   exit 1
 fi
 
+# --- Version regression & duplication checks --------------
 LATEST_TAG=$(git tag --sort=-v:refname | head -n1 || true)
+
+if [[ -n "${LATEST_TAG}" ]]; then
+  if [[ "$(printf '%s\n' "${LATEST_TAG}" "${VERSION}" | sort -V | head -n1)" != "${LATEST_TAG}" ]]; then
+    echo "⛔ Version regression: ${VERSION} < ${LATEST_TAG}"
+    echo "   You cannot release a version lower than the latest tag."
+    exit 1
+  fi
+  if [[ "${VERSION}" == "${LATEST_TAG}" ]]; then
+    if grep -q "^## ${VERSION}" "${CHANGELOG}" 2>/dev/null; then
+      CL_MSG='Will be appended under the existing section'
+      CL_APPEND_ONLY=true
+      CL_ENTRY='cl_append'
+    else
+      CL_MSG='Will be inserted as a new section-entry'
+      CL_ENTRY='cl_insert'
+    fi
+  fi
+fi
+
+# --- Branch validation ------------------------------------
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [[ -n "${BRANCH}" ]]; then
+  # user defined branch takes precedence
+  if [[ "${CURRENT_BRANCH}" != "${BRANCH}" ]]; then
+    echo "⚠️  You are on branch '${CURRENT_BRANCH}', expected '${BRANCH}'."
+    read -rp "Proceed with release? [Y/N]: " CONFIRM
+    [[ "${CONFIRM,,}" != "y" ]] && { echo "❌ Aborted."; exit 1; }
+  fi
+else
+  # default main/master check
+  if [[ "${CURRENT_BRANCH}" != "main" && "${CURRENT_BRANCH}" != "master" ]]; then
+    echo "⚠️  You are on branch '${CURRENT_BRANCH}', not 'main' or 'master'."
+    read -rp "Proceed with release? [Y/N]: " CONFIRM
+    [[ "${CONFIRM,,}" != "y" ]] && { echo "❌ Aborted."; exit 1; }
+  fi
+fi
 
 # --- Detect file changes ----------------------------------
 FILE_CHANGED=false
@@ -99,51 +141,101 @@ TAG_MSG="${USER_TAG_MSG:-$DEFAULT_TAG_MSG}"
 
 # --- Preview ----------------------------------------------
 echo
-echo "🧾 Version : ${VERSION}"
-echo "💬 Commit  : ${COMMIT_MSG}"
-echo "🏷️ Tag Msg : ${TAG_MSG}"
-echo "📁 File    : ${HEADER_FILE}"
+echo "🧾 Version   : ${VERSION}"
+echo "💬 Commit    : ${COMMIT_MSG}"
+echo "🏷️ Tag Msg   : ${TAG_MSG}"
+echo "📁 File      : ${HEADER_FILE}"
+echo "🪶 Changelog : ${CL_MSG}: ${VERSION}"
+
 if [[ "${DRY_RUN}" == true ]]; then
-  echo "Dry Run    : ${DRY_RUN}"
   echo
-  echo "💡 Dry run only — no git actions performed."
+  echo "💡 Dry run only — no git actions performed!!"
   exit 0
 fi
-read -rp "Proceed with release? [y/N]: " CONFIRM
+read -rp "Proceed with release? [Y/N]: " CONFIRM
 [[ "${CONFIRM}" =~ ^[Yy]$ ]] || { echo "❎ Aborted."; exit 0; }
 
 # --- Update CHANGELOG -------------------------------------
 DATE_STR=$(date +"%Y-%m-%d")
-if [[ -f "${CHANGELOG}" ]]; then
-  TMP="$(mktemp)"
-  HEADER_END_LINE=$(grep -nE '^---|^## ' "${CHANGELOG}" | head -n1 | cut -d: -f1)
-  if [[ -n "${HEADER_END_LINE}" ]]; then
-    head -n "${HEADER_END_LINE}" "${CHANGELOG}" > "${TMP}"
-    echo "" >> "${TMP}"
-    echo "## ${VERSION} — ${DATE_STR}" >> "${TMP}"
-    echo "- ${COMMIT_MSG}" >> "${TMP}"
-    echo "" >> "${TMP}"
-    tail -n +"$((HEADER_END_LINE + 1))" "${CHANGELOG}" >> "${TMP}"
+
+if [[ "${CL_APPEND_ONLY:-false}" == true ]]; then
+  echo "🪶 Appending changelog entry under existing section for ${VERSION}..."
+  OS_TYPE=$(uname -s)
+  [[ -f "${CHANGELOG}" ]] || touch "${CHANGELOG}"
+
+  if [[ "${OS_TYPE}" == "Darwin" ]]; then
+    # macOS / BSD sed
+    sed -i '' "/^## ${VERSION}/a\\
+- ${COMMIT_MSG}" "${CHANGELOG}"
   else
-    echo "## ${VERSION} — ${DATE_STR}" > "${TMP}"
-    echo "- ${COMMIT_MSG}" >> "${TMP}"
-    echo "" >> "${TMP}"
-    cat "${CHANGELOG}" >> "${TMP}"
+    # GNU / Linux sed
+    sed -i "/^## ${VERSION}/a - ${COMMIT_MSG}" "${CHANGELOG}"
   fi
-  mv "${TMP}" "${CHANGELOG}"
 else
-  {
-    echo "# Changelog"
-    echo ""
-    echo "All notable changes will be documented in this file."
-    echo ""
-    echo "---"
-    echo ""
-    echo "## ${VERSION} — ${DATE_STR}"
-    echo "- ${COMMIT_MSG}"
-    echo ""
-  } > "${CHANGELOG}"
+  if [[ -f "${CHANGELOG}" ]]; then
+    TMP="$(mktemp)"
+    HEADER_END_LINE=$(grep -nE '^---|^## ' "${CHANGELOG}" | head -n1 | cut -d: -f1)
+    if [[ -n "${HEADER_END_LINE}" ]]; then
+      head -n "${HEADER_END_LINE}" "${CHANGELOG}" > "${TMP}"
+      echo "" >> "${TMP}"
+      echo "## ${VERSION} — ${DATE_STR}" >> "${TMP}"
+      echo "- ${COMMIT_MSG}" >> "${TMP}"
+      echo "" >> "${TMP}"
+      tail -n +"$((HEADER_END_LINE + 1))" "${CHANGELOG}" >> "${TMP}"
+    else
+      echo "## ${VERSION} — ${DATE_STR}" > "${TMP}"
+      echo "- ${COMMIT_MSG}" >> "${TMP}"
+      echo "" >> "${TMP}"
+      cat "${CHANGELOG}" >> "${TMP}"
+    fi
+    mv "${TMP}" "${CHANGELOG}"
+  else
+    {
+      echo "# Changelog"
+      echo ""
+      echo "All notable changes will be documented in this file."
+      echo ""
+      echo "---"
+      echo ""
+      echo "## ${VERSION} — ${DATE_STR}"
+      echo "- ${COMMIT_MSG}"
+      echo ""
+    } > "${CHANGELOG}"
+  fi
 fi
+
+## --- Update CHANGELOG -------------------------------------
+#DATE_STR=$(date +"%Y-%m-%d")
+#if [[ -f "${CHANGELOG}" ]]; then
+#  TMP="$(mktemp)"
+#  HEADER_END_LINE=$(grep -nE '^---|^## ' "${CHANGELOG}" | head -n1 | cut -d: -f1)
+#  if [[ -n "${HEADER_END_LINE}" ]]; then
+#    head -n "${HEADER_END_LINE}" "${CHANGELOG}" > "${TMP}"
+#    echo "" >> "${TMP}"
+#    echo "## ${VERSION} — ${DATE_STR}" >> "${TMP}"
+#    echo "- ${COMMIT_MSG}" >> "${TMP}"
+#    echo "" >> "${TMP}"
+#    tail -n +"$((HEADER_END_LINE + 1))" "${CHANGELOG}" >> "${TMP}"
+#  else
+#    echo "## ${VERSION} — ${DATE_STR}" > "${TMP}"
+#    echo "- ${COMMIT_MSG}" >> "${TMP}"
+#    echo "" >> "${TMP}"
+#    cat "${CHANGELOG}" >> "${TMP}"
+#  fi
+#  mv "${TMP}" "${CHANGELOG}"
+#else
+#  {
+#    echo "# Changelog"
+#    echo ""
+#    echo "All notable changes will be documented in this file."
+#    echo ""
+#    echo "---"
+#    echo ""
+#    echo "## ${VERSION} — ${DATE_STR}"
+#    echo "- ${COMMIT_MSG}"
+#    echo ""
+#  } > "${CHANGELOG}"
+#fi
 
 # --- Git commit, tag, push --------------------------------
 [[ ${ADD_ALL} == 'true' ]] && git add -A || true
@@ -165,3 +257,4 @@ fi
 
 echo
 echo "🎉 Done! Tagged ${VERSION}, updated CHANGELOG, and pushed to origin."
+exit 0

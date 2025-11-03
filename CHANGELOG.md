@@ -5,6 +5,7 @@ All notable changes will be documented in this file.
 ---
 
 ## v1.1.3 — 2025-11-02
+- Testing APPEND message under v1.1.3
 - Testing - Take-1.1.3
 
 
