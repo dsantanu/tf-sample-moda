@@ -240,9 +240,19 @@ fi
 # --- Git commit, tag, push --------------------------------
 [[ ${ADD_ALL} == 'true' ]] && git add -A || true
 git commit -m "${COMMIT_MSG}" . || true
-git tag -a "${VERSION}" -m "${TAG_MSG}"
-git push origin HEAD
-git push origin "${VERSION}"
+
+if [[ "${CL_APPEND_ONLY:-false}" == true ]]; then
+  echo "ℹ️  Existing version detected — skipping tag creation."
+  echo "   Committing changelog updates only..."
+  git push origin "${CURRENT_BRANCH}"
+else
+  echo "🏷️ Creating new tag: ${VERSION}"
+  git tag -a "${VERSION}" -m "${TAG_MSG}"
+  git push origin HEAD --tags
+fi
+#git tag -a "${VERSION}" -m "${TAG_MSG}"
+#git push origin HEAD
+#git push origin "${VERSION}"
 
 # --- GitHub release (if gh exists) ------------------------
 if command -v gh >/dev/null 2>&1; then
