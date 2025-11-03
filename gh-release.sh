@@ -161,12 +161,11 @@ DATE_STR=$(date +"%Y-%m-%d")
 if [[ "${CL_APPEND_ONLY:-false}" == true ]]; then
   echo "🪶 Appending changelog entry under existing section for ${VERSION}..."
   [[ -f "${CHANGELOG}" ]] || touch "${CHANGELOG}"
-  #
-  set -x
+
   # Find the start of the section for this version
   LINE_START=$(grep -n "^## ${VERSION}" "${CHANGELOG}" | head -n1 | cut -d: -f1)
 
-  # Find the last non-empty line within that section (single number, no duplicates)
+  # Find the last non-empty line within that section
   LINE_END=$(awk -v s="${LINE_START}" '
   BEGIN { last = s; printed = 0 }
   NR > s {
@@ -181,16 +180,6 @@ if [[ "${CL_APPEND_ONLY:-false}" == true ]]; then
   echo "- ${COMMIT_MSG}" >> "${TMP}"
   tail -n +"$((LINE_END + 1))" "${CHANGELOG}" >> "${TMP}"
   mv "${TMP}" "${CHANGELOG}"
-
-  #OS_TYPE=$(uname -s)
-  #if [[ "${OS_TYPE}" == "Darwin" ]]; then
-  #  # macOS / BSD sed
-  #  sed -i '' "/^## ${VERSION}/a\\
-#- ${COMMIT_MSG}" "${CHANGELOG}"
-  #else
-  #  # GNU / Linux sed
-  #  sed -i "/^## ${VERSION}/a - ${COMMIT_MSG}" "${CHANGELOG}"
-  #fi
 else
   if [[ -f "${CHANGELOG}" ]]; then
     TMP="$(mktemp)"
