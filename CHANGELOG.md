@@ -6,6 +6,7 @@ All notable changes will be documented in this file.
 
 ## v1.1.4 — 2025-11-03
 - Testing new v1.1.4
+- Testing APPEND message under v1.1.4
 
 
 ## v1.1.3 — 2025-11-02
