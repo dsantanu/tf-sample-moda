@@ -12,7 +12,7 @@ set -euo pipefail
 # --- CLI args ---------------------------------------------
 HEADER_FILE='header-info.txt'
 CHANGELOG='CHANGELOG.md'
-USER_COMMIT_MSG=""
+USER_COMMIT_MSG=''
 FILE_CHANGED=false
 ADD_ALL=false
 DRY_RUN=false
@@ -144,8 +144,8 @@ echo
 echo "🧾 Version   : ${VERSION}"
 echo "💬 Commit    : ${COMMIT_MSG}"
 echo "🏷️ Tag Msg   : ${TAG_MSG}"
-echo "📁 File      : ${HEADER_FILE}"
-echo "🪶 Changelog : ${CL_MSG}: ${VERSION}"
+echo "📁 Changelog : ${CL_MSG}: ${VERSION}"
+#echo "📁 File      : ${HEADER_FILE}"
 
 if [[ "${DRY_RUN}" == true ]]; then
   echo
@@ -160,17 +160,37 @@ DATE_STR=$(date +"%Y-%m-%d")
 
 if [[ "${CL_APPEND_ONLY:-false}" == true ]]; then
   echo "🪶 Appending changelog entry under existing section for ${VERSION}..."
-  OS_TYPE=$(uname -s)
   [[ -f "${CHANGELOG}" ]] || touch "${CHANGELOG}"
+  #
+  set -x
+  # Find the start of the section for this version
+  LINE_START=$(grep -n "^## ${VERSION}" "${CHANGELOG}" | head -n1 | cut -d: -f1)
 
-  if [[ "${OS_TYPE}" == "Darwin" ]]; then
-    # macOS / BSD sed
-    sed -i '' "/^## ${VERSION}/a\\
-- ${COMMIT_MSG}" "${CHANGELOG}"
-  else
-    # GNU / Linux sed
-    sed -i "/^## ${VERSION}/a - ${COMMIT_MSG}" "${CHANGELOG}"
-  fi
+  # Find the last non-empty line within that section (single number, no duplicates)
+  LINE_END=$(awk -v s="${LINE_START}" '
+  BEGIN { last = s; printed = 0 }
+  NR > s {
+    if ($0 ~ /^## /) { print last; printed = 1; exit }   # next version header -> stop
+    if ($0 !~ /^[[:space:]]*$/) { last = NR }            # track last non-empty line
+  }
+  END { if (!printed) print last }                       # EOF -> use the last recorded line
+  ' "${CHANGELOG}")
+
+  TMP="$(mktemp)"
+  head -n "${LINE_END}" "${CHANGELOG}" > "${TMP}"
+  echo "- ${COMMIT_MSG}" >> "${TMP}"
+  tail -n +"$((LINE_END + 1))" "${CHANGELOG}" >> "${TMP}"
+  mv "${TMP}" "${CHANGELOG}"
+
+  #OS_TYPE=$(uname -s)
+  #if [[ "${OS_TYPE}" == "Darwin" ]]; then
+  #  # macOS / BSD sed
+  #  sed -i '' "/^## ${VERSION}/a\\
+#- ${COMMIT_MSG}" "${CHANGELOG}"
+  #else
+  #  # GNU / Linux sed
+  #  sed -i "/^## ${VERSION}/a - ${COMMIT_MSG}" "${CHANGELOG}"
+  #fi
 else
   if [[ -f "${CHANGELOG}" ]]; then
     TMP="$(mktemp)"

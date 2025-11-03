@@ -8,6 +8,7 @@ All notable changes will be documented in this file.
 - Append testing, take-2, under v1.1.3
 - Testing APPEND message under v1.1.3
 - Testing - Take-1.1.3
+- Another APPEND test for v1.1.3
 
 
 ## v1.1.2 — 2025-11-02
